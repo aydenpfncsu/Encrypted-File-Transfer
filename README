@@ -1,0 +1,13 @@
+Ayden Franklin
+200407752
+
+Citations:
+
+  uft.py:
+    - common naming conventions and socket programming practices were influenced by Geeks for Geeks Socket Programming in Python
+    https://www.geeksforgeeks.org/python/socket-programming-python/. Accessed Aug. 26, Aug. 27
+    - Other naming conventions and method usage taken from Python docs for sockets
+    https://docs.python.org/3/library/socket.html. Accessed Aug. 26, Aug. 27
+    - Chatgpt. Prompt: "how to ensure header bytes are sent in big endian order for python Socket." Accessed September 1, 2025. chatgpt.com
+    Prompt gave information on python3 struct module which I used to pack the header information between client and server.
+    Prompt inspired my creation of recv_n_bytes helper function, used to properly receive the stream of bytes from the TCP connection.
