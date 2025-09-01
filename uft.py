@@ -14,6 +14,8 @@ def recv_n_bytes(conn, n):
     # loop until the size of the receievd pdu is equal to the expected size as declared in the header
     while len(data) < n:
         packet = conn.recv(n - len(data)) # n - len(data) specifies we are still waiting to recieve the missing bytes
+        if not packet: # client closed connection unexpectingly
+            return None
         data += packet # add received byte streamt to the total bytes of data
     return data
 
