@@ -40,6 +40,11 @@ def server(port, password):
             conn, addr = s.accept()
  
             with conn:
+                # Before receiving pdus, get 16 byte salt from client to set up symmetic key
+                salt = recv_n_bytes(conn, 16)
+                # construct symmetric key using salt
+                key = PBKDF2(password, salt, 32)
+                # now that key is constructed, begin receiving PDUs from client
                 while True:
                     # unpack the header bytes sent from the client
                     header = recv_n_bytes(conn, 2) 
@@ -47,13 +52,27 @@ def server(port, password):
                     # if length == 0, then client finished file send and closed the connection
                     if length == 0:
                         break
-                    # recieve the pdu of specifized length from the header 
-                    pdu = recv_n_bytes(conn, length) 
-                    if not pdu:
+                    
+                    try:
+                        # first receive the nonce (IV)
+                        nonce = recv_n_bytes(conn, 16)
+                        # receive the integrity tag
+                        tag = recv_n_bytes(conn, 16)
+                        # create the cipher object to decrypt the ciphertext
+                        cipher = AES.new(key, AES.MODE_GCM, nonce = nonce)
+                        # recieve the ciphertext of specifized length from the header; account for the 32 bytes from nonce, tag
+                        ciphertext = recv_n_bytes(conn, length-32) 
+                        if not ciphertext:
+                            break
+
+                        # decrypt ciphertext
+                        plaintext = cipher.decrypt_and_verify(ciphertext, tag)
+                    except (ValueError, KeyError):
+                        sys.stderr.write("Error: integrity check failed.")
                         break
 
                     # write to the file specified from the command line
-                    sys.stdout.buffer.write(pdu)
+                    sys.stdout.buffer.write(plaintext)
             break
 
 def client(ip, port, password):
@@ -83,9 +102,10 @@ def client(ip, port, password):
                 cipher = AES.new(key, AES.MODE_GCM)
                 # read from the file specified from the command line 
                 plaintext = (sys.stdin.buffer.read(1024))
-                if not pdu:
+                if not plaintext:
                     break
-                
+                # pad the plaintext (if necessary)
+                #TODO
                 # encrypt the data to get a ciphertext and a tag
                 ciphertext, tag = cipher.encrypt_and_digest(plaintext)
 
