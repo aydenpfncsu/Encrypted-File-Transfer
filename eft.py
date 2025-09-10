@@ -69,7 +69,7 @@ def server(port, password):
                         cipher.update(header)
                         # decrypt ciphertext
                         plaintext = cipher.decrypt_and_verify(ciphertext, tag)
-                        print(f"Server. pt {len(plaintext)}; ct {len(ciphertext)}; tag {len(tag)}; nonce {len(nonce)}.", file=sys.stderr)
+                        # print(f"Server. pt {len(plaintext)}; ct {len(ciphertext)}; tag {len(tag)}; nonce {len(nonce)}.", file=sys.stderr)
                     except (ValueError, KeyError):
                         sys.stderr.write("Error: integrity check failed.")
                         break
@@ -120,7 +120,7 @@ def client(ip, port, password):
 
                 # encrypt the data to get a ciphertext and a tag
                 ciphertext, tag = cipher.encrypt_and_digest(plaintext)
-                print(f"Client. pt {len(plaintext)}; ct {len(ciphertext)}; tag {len(tag)}; nonce {len(cipher.nonce)}.")
+                # print(f"Client. pt {len(plaintext)}; ct {len(ciphertext)}; tag {len(tag)}; nonce {len(cipher.nonce)}.")
                 # send header, IV, tag, and ciphertext to server 
                 s.sendall(header + cipher.nonce + tag + ciphertext)
             # file data fully sent, but server will stay open as it is unaware. 
