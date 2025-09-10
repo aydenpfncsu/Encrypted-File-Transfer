@@ -51,22 +51,25 @@ def server(port, password):
                     (length,) = struct.unpack(">H", header)
                     # if length == 0, then client finished file send and closed the connection
                     if length == 0:
-                        break
+                        break # end of file transfer
                     
+                    # first receive the nonce (IV)
+                    nonce = recv_n_bytes(conn, 16)
+                    # receive the integrity tag
+                    tag = recv_n_bytes(conn, 16)
+                    # recieve the ciphertext of specifized length from the header; account for the 32 bytes from nonce, tag
+                    ciphertext = recv_n_bytes(conn, length - len(nonce) - len(tag)) 
+                    if not ciphertext:
+                        break
+
                     try:
-                        # first receive the nonce (IV)
-                        nonce = recv_n_bytes(conn, 16)
-                        # receive the integrity tag
-                        tag = recv_n_bytes(conn, 16)
                         # create the cipher object to decrypt the ciphertext
                         cipher = AES.new(key, AES.MODE_GCM, nonce = nonce)
-                        # recieve the ciphertext of specifized length from the header; account for the 32 bytes from nonce, tag
-                        ciphertext = recv_n_bytes(conn, length-32) 
-                        if not ciphertext:
-                            break
-
+                        # check for authenticity of the header
+                        cipher.update(header)
                         # decrypt ciphertext
                         plaintext = cipher.decrypt_and_verify(ciphertext, tag)
+                        print(f"Server. pt {len(plaintext)}; ct {len(ciphertext)}; tag {len(tag)}; nonce {len(nonce)}.", file=sys.stderr)
                     except (ValueError, KeyError):
                         sys.stderr.write("Error: integrity check failed.")
                         break
@@ -98,20 +101,26 @@ def client(ip, port, password):
         # send data to the server
         try:
             while True:
-                # create cipher object for encryption process
-                cipher = AES.new(key, AES.MODE_GCM)
                 # read from the file specified from the command line 
                 plaintext = (sys.stdin.buffer.read(1024))
                 if not plaintext:
                     break
                 # pad the plaintext (if necessary)
                 #TODO
+
+                # create cipher object for encryption process. Deafult nonce size is 16 bytes, specifying nonce just for insurance.
+                cipher = AES.new(key, AES.MODE_GCM) 
+
+                # pack header bytes (2) of total length of ciphertext, tag, and nonce
+                # we haven't initialized the tag yet, but know it will be 16 bytes. So hard code its size
+                # ">H" specifies the bytes will be sent in big-endian
+                header = struct.pack(">H", len(plaintext) + 16 + len(cipher.nonce))
+                # update will authenticate the header. Unnecessary to authenticate the nonce; and the ciphertext and tag are authenticated through encryption
+                cipher.update(header)
+
                 # encrypt the data to get a ciphertext and a tag
                 ciphertext, tag = cipher.encrypt_and_digest(plaintext)
-
-                # pack header bytes (2) of total length of ciphertext, IV, and tag 
-                # ">H" specifies the bytes will be sent in big-endian
-                header = struct.pack(">H", len(ciphertext) + len(tag) + len(cipher.nonce))
+                print(f"Client. pt {len(plaintext)}; ct {len(ciphertext)}; tag {len(tag)}; nonce {len(cipher.nonce)}.")
                 # send header, IV, tag, and ciphertext to server 
                 s.sendall(header + cipher.nonce + tag + ciphertext)
             # file data fully sent, but server will stay open as it is unaware. 
