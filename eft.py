@@ -3,6 +3,9 @@
 import sys
 import socket
 import struct
+from Crypto.Cipher import AES
+from Crypto.Random import get_random_bytes
+from Crypto.Protocol.KDF import PBKDF2
 
 # Necessary because TCP connections send data through a stream of bytes. We cannot be certain if we will receive the entire
 # pdu data in one packet. This fn calls recv() until the bytes received is equal to the number of bytes specified by the header
@@ -18,12 +21,17 @@ def recv_n_bytes(conn, n):
         data += packet # add received byte streamt to the total bytes of data
     return data
 
-def server(port):
-    """Create a server to receive a file over a socket"""
+def server(port, password):
+    """
+    Create a server to receive a file over a socket
+
+    @param port: port numbe for the connection
+    @param password: password used to generate the symmetric key
+    """
     # create a socket for the server program
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         # bind the socket to the command line specified port. Open '' indicates we are not specifying a specific IP to listen to
-        s.bind(('', int(port)))
+        s.bind(('', port))
         # listen to incoming connections from a client. Server will accept one connection
         s.listen(1)
 
@@ -48,22 +56,39 @@ def server(port):
                     sys.stdout.buffer.write(pdu)
             break
 
-def client(ip, port):
-    """Create a client to send a file to remote server over a socket"""
+def client(ip, port, password):
+    """
+    Create a client to send a file to remote server over a socket
+
+    @param ip: ip address for the connection
+    @param port: port number for the connection
+    @param password: password used to generate symmetric key
+    """
     # create socket for the client connection
     # AF_INET indictaes socket will use IPv4
     # SOCK_STREAM indicates the socket will operate using TCP connection
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         # connect to the server specified by the IP and port
-        s.connect((ip, int(port)))
-
+        s.connect((ip, port))
+        
+        # generate and send salt to the server, unencrypted is fine
+        salt = get_random_bytes(16)
+        s.sendall(salt)
+        # construct the symmetric key
+        key = PBKDF2(password, salt, 32)
         # send data to the server
         try:
             while True:
+                # create cipher object for encryption process
+                cipher = AES.new(key, AES.MODE_GCM)
                 # read from the file specified from the command line 
                 pdu = (sys.stdin.buffer.read(1024))
                 if not pdu:
                     break
+                
+                # encrypt the data to get a ciphertext and a tag
+                ciphertext, tag = cipher.encrypt_and_digest(pdu)
+
                 # pack header bytes (2) and send PDU size
                 # ">H" specifies the bytes will be sent in big-endian
                 header = struct.pack(">H", len(pdu))
@@ -78,22 +103,23 @@ def client(ip, port):
 
 def main():
     """Main entry point into the program"""
-    # ensure at least 1 argument passed so no index error 
-    if len(sys.argv) < 2:
+    # ensure correct number of arguments passed
+    if len(sys.argv) != 5:
         sys.exit(1)
-    # parse the arguments from the command line to determine mode of uft
-    if sys.argv[1] == "-l":
-        # ensure correct arguments were passed
-        if len(sys.argv) != 3:
-            sys.exit(1)
-        # first argument 'listen' -> enter server mode
-        server(sys.argv[2])
+
+    # ensure correct arguments passed
+    if sys.argv[1] != "-k":
+        sys.exit(1)
+    # store password value used to generate key
+    password = sys.argv[2]
+
+    if sys.argv[3] == "-l":
+        # enter server mode; convert port number to integer
+        server(int(sys.argv[4]), password)
     else:
-        # ensure correct arguments passed
-        if len(sys.argv) != 3:
-            sys.exit(1)
-        # first argument a IP address, enter client mode
-        client(sys.argv[1], sys.argv[2])
+        # enter client mode
+        client(sys.argv[3], int(sys.argv[4]), password)
+        
 
 
 if __name__ == "__main__":
