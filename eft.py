@@ -82,18 +82,18 @@ def client(ip, port, password):
                 # create cipher object for encryption process
                 cipher = AES.new(key, AES.MODE_GCM)
                 # read from the file specified from the command line 
-                pdu = (sys.stdin.buffer.read(1024))
+                plaintext = (sys.stdin.buffer.read(1024))
                 if not pdu:
                     break
                 
                 # encrypt the data to get a ciphertext and a tag
-                ciphertext, tag = cipher.encrypt_and_digest(pdu)
+                ciphertext, tag = cipher.encrypt_and_digest(plaintext)
 
-                # pack header bytes (2) and send PDU size
+                # pack header bytes (2) of total length of ciphertext, IV, and tag 
                 # ">H" specifies the bytes will be sent in big-endian
-                header = struct.pack(">H", len(pdu))
-                # send PDU to the server
-                s.sendall(header + pdu)
+                header = struct.pack(">H", len(ciphertext) + len(tag) + len(cipher.nonce))
+                # send header, IV, tag, and ciphertext to server 
+                s.sendall(header + cipher.nonce + tag + ciphertext)
             # file data fully sent, but server will stay open as it is unaware. 
             # Need to send a header with a 0-sized byte data so server knows
             header = struct.pack(">H", 0)
