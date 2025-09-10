@@ -6,6 +6,7 @@ import struct
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
 from Crypto.Protocol.KDF import PBKDF2
+from Crypto.Util.Padding import pad, unpad
 
 # Necessary because TCP connections send data through a stream of bytes. We cannot be certain if we will receive the entire
 # pdu data in one packet. This fn calls recv() until the bytes received is equal to the number of bytes specified by the header
@@ -67,9 +68,10 @@ def server(port, password):
                         cipher = AES.new(key, AES.MODE_GCM, nonce = nonce)
                         # check for authenticity of the header
                         cipher.update(header)
-                        # decrypt ciphertext
-                        plaintext = cipher.decrypt_and_verify(ciphertext, tag)
-                        # print(f"Server. pt {len(plaintext)}; ct {len(ciphertext)}; tag {len(tag)}; nonce {len(nonce)}.", file=sys.stderr)
+                        # decrypt ciphertext and unpad (when necessary)
+                        pad_plaintext = cipher.decrypt_and_verify(ciphertext, tag)
+                        plaintext = unpad(pad_plaintext, 16)
+                        # print(f"Server. pad_pt{len(pad_plaintext)}; pt {len(plaintext)}; ct {len(ciphertext)}; tag {len(tag)}; nonce {len(nonce)}.", file=sys.stderr)
                     except (ValueError, KeyError):
                         sys.stderr.write("Error: integrity check failed.")
                         break
@@ -106,7 +108,7 @@ def client(ip, port, password):
                 if not plaintext:
                     break
                 # pad the plaintext (if necessary)
-                #TODO
+                pad_plaintext = pad(plaintext, 16)
 
                 # create cipher object for encryption process. Deafult nonce size is 16 bytes, specifying nonce just for insurance.
                 cipher = AES.new(key, AES.MODE_GCM) 
@@ -114,13 +116,13 @@ def client(ip, port, password):
                 # pack header bytes (2) of total length of ciphertext, tag, and nonce
                 # we haven't initialized the tag yet, but know it will be 16 bytes. So hard code its size
                 # ">H" specifies the bytes will be sent in big-endian
-                header = struct.pack(">H", len(plaintext) + 16 + len(cipher.nonce))
+                header = struct.pack(">H", len(pad_plaintext) + 16 + len(cipher.nonce))
                 # update will authenticate the header. Unnecessary to authenticate the nonce; and the ciphertext and tag are authenticated through encryption
                 cipher.update(header)
 
                 # encrypt the data to get a ciphertext and a tag
-                ciphertext, tag = cipher.encrypt_and_digest(plaintext)
-                # print(f"Client. pt {len(plaintext)}; ct {len(ciphertext)}; tag {len(tag)}; nonce {len(cipher.nonce)}.")
+                ciphertext, tag = cipher.encrypt_and_digest(pad_plaintext)
+                # print(f"Client. pad_pt {len(pad_plaintext)}; pt {len(plaintext)}; ct {len(ciphertext)}; tag {len(tag)}; nonce {len(cipher.nonce)}.")
                 # send header, IV, tag, and ciphertext to server 
                 s.sendall(header + cipher.nonce + tag + ciphertext)
             # file data fully sent, but server will stay open as it is unaware. 
