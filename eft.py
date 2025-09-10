@@ -71,8 +71,13 @@ def server(port, password):
                         # decrypt ciphertext and unpad (when necessary)
                         pad_plaintext = cipher.decrypt_and_verify(ciphertext, tag)
                         plaintext = unpad(pad_plaintext, 16)
+
+                        if plaintext == b"":
+                            break
+
                         # print(f"Server. pad_pt{len(pad_plaintext)}; pt {len(plaintext)}; ct {len(ciphertext)}; tag {len(tag)}; nonce {len(nonce)}.", file=sys.stderr)
-                    except (ValueError, KeyError):
+                    except (ValueError, KeyError) as e:
+                        print(e, file=sys.stderr)
                         sys.stderr.write("Error: integrity check failed.")
                         break
 
@@ -127,8 +132,14 @@ def client(ip, port, password):
                 s.sendall(header + cipher.nonce + tag + ciphertext)
             # file data fully sent, but server will stay open as it is unaware. 
             # Need to send a header with a 0-sized byte data so server knows
-            header = struct.pack(">H", 0)
-            s.sendall(header)
+            empty = b""
+            empty_bytes = pad(empty, 16)
+            cipher = AES.new(key, AES.MODE_GCM)
+
+            header = struct.pack(">H", len(empty_bytes) + 16 + len(cipher.nonce))
+            cipher.update(header)
+            ciphertext, tag = cipher.encrypt_and_digest(empty_bytes)
+            s.sendall(header + cipher.nonce + tag + empty_bytes)
         except socket.error as e:
             sys.exit(1)
 
