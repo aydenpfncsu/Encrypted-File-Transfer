@@ -111,7 +111,7 @@ def client(ip, port, password):
                 # read from the file specified from the command line 
                 plaintext = (sys.stdin.buffer.read(1024))
                 if not plaintext:
-                    break
+                    plaintext = b""
                 # pad the plaintext (if necessary)
                 pad_plaintext = pad(plaintext, 16)
 
@@ -130,16 +130,11 @@ def client(ip, port, password):
                 # print(f"Client. pad_pt {len(pad_plaintext)}; pt {len(plaintext)}; ct {len(ciphertext)}; tag {len(tag)}; nonce {len(cipher.nonce)}.")
                 # send header, IV, tag, and ciphertext to server 
                 s.sendall(header + cipher.nonce + tag + ciphertext)
-            # file data fully sent, but server will stay open as it is unaware. 
-            # Need to send a header with a 0-sized byte data so server knows
-            empty = b""
-            empty_bytes = pad(empty, 16)
-            cipher = AES.new(key, AES.MODE_GCM)
 
-            header = struct.pack(">H", len(empty_bytes) + 16 + len(cipher.nonce))
-            cipher.update(header)
-            ciphertext, tag = cipher.encrypt_and_digest(empty_bytes)
-            s.sendall(header + cipher.nonce + tag + empty_bytes)
+                # if file transfer is complete, i.e. plaintext is empty byte object, terminate client process
+                if plaintext == b"":
+                    break
+
         except socket.error as e:
             sys.exit(1)
 
