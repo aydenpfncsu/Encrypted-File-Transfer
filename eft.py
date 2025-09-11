@@ -36,54 +36,52 @@ def server(port, password):
         # listen to incoming connections from a client. Server will accept one connection
         s.listen(1)
 
-        while True:
-            # wait for connection from client
-            conn, addr = s.accept()
- 
-            with conn:
-                # Before receiving pdus, get 16 byte salt from client to set up symmetic key
-                salt = recv_n_bytes(conn, 16)
-                # construct symmetric key using salt
-                key = PBKDF2(password, salt, 32)
-                # now that key is constructed, begin receiving PDUs from client
-                while True:
-                    # unpack the header bytes sent from the client
-                    header = recv_n_bytes(conn, 2) 
-                    (length,) = struct.unpack(">H", header)
-                    # if length == 0, then client finished file send and closed the connection
-                    if length == 0:
-                        break # end of file transfer
-                    
-                    # first receive the nonce (IV)
-                    nonce = recv_n_bytes(conn, 16)
-                    # receive the integrity tag
-                    tag = recv_n_bytes(conn, 16)
-                    # recieve the ciphertext of specifized length from the header; account for the 32 bytes from nonce, tag
-                    ciphertext = recv_n_bytes(conn, length - len(nonce) - len(tag)) 
-                    if not ciphertext:
-                        break
+        # wait for connection from client
+        conn, addr = s.accept()
 
-                    try:
-                        # create the cipher object to decrypt the ciphertext
-                        cipher = AES.new(key, AES.MODE_GCM, nonce = nonce)
-                        # check for authenticity of the header
-                        cipher.update(header)
-                        # decrypt ciphertext and unpad (when necessary)
-                        pad_plaintext = cipher.decrypt_and_verify(ciphertext, tag)
-                        plaintext = unpad(pad_plaintext, 16)
+        with conn:
+            # Before receiving pdus, get 16 byte salt from client to set up symmetic key
+            salt = recv_n_bytes(conn, 16)
+            # construct symmetric key using salt
+            key = PBKDF2(password, salt, dkLen = 32)
+            # now that key is constructed, begin receiving PDUs from client
+            while True:
+                # unpack the header bytes sent from the client
+                header = recv_n_bytes(conn, 2) 
+                if not header:
+                    # Client completed sending file, close the server
+                    break
+                (length,) = struct.unpack(">H", header)
+                
+                # first receive the nonce (IV)
+                nonce = recv_n_bytes(conn, 16)
+                # receive the integrity tag
+                tag = recv_n_bytes(conn, 16)
+                # recieve the ciphertext of specifized length from the header; account for the 32 bytes from nonce, tag
+                ciphertext = recv_n_bytes(conn, length - len(nonce) - len(tag)) 
+                if not nonce or not tag or ciphertext is None:
+                    break
 
-                        if plaintext == b"":
-                            break
+                try:
+                    # create the cipher object to decrypt the ciphertext
+                    cipher = AES.new(key, AES.MODE_GCM, nonce = nonce)
+                    # check for authenticity of the header
+                    # cipher.update(header)
+                    # decrypt ciphertext and unpad (when necessary)
+                    pad_plaintext = cipher.decrypt_and_verify(ciphertext, tag)
+                    plaintext = unpad(pad_plaintext, 16)
 
-                        # print(f"Server. pad_pt{len(pad_plaintext)}; pt {len(plaintext)}; ct {len(ciphertext)}; tag {len(tag)}; nonce {len(nonce)}.", file=sys.stderr)
-                    except (ValueError, KeyError) as e:
-                        print(e, file=sys.stderr)
-                        sys.stderr.write("Error: integrity check failed.")
-                        break
+                    # print(f"Server. pad_pt{len(pad_plaintext)}; pt {len(plaintext)}; ct {len(ciphertext)}; tag {len(tag)}; nonce {len(nonce)}.", file=sys.stderr)
+                except (ValueError, KeyError) as e:
+                    sys.stderr.write("Error: integrity check failed.\n")
+                    break
 
-                    # write to the file specified from the command line
-                    sys.stdout.buffer.write(plaintext)
-            break
+                # close connection if client sent empyt byte object - signaling file trasnfer complete
+                if plaintext == b"":
+                    break
+                # write to the file specified from the command line
+                sys.stdout.buffer.write(plaintext)
+
 
 def client(ip, port, password):
     """
@@ -104,26 +102,26 @@ def client(ip, port, password):
         salt = get_random_bytes(16)
         s.sendall(salt)
         # construct the symmetric key
-        key = PBKDF2(password, salt, 32)
+        key = PBKDF2(password, salt, dkLen = 32)
         # send data to the server
         try:
             while True:
                 # read from the file specified from the command line 
                 plaintext = (sys.stdin.buffer.read(1024))
                 if not plaintext:
-                    plaintext = b""
+                    # EOF reached, break and close the client
+                    break
                 # pad the plaintext (if necessary)
                 pad_plaintext = pad(plaintext, 16)
 
-                # create cipher object for encryption process. Deafult nonce size is 16 bytes, specifying nonce just for insurance.
+                # create cipher object for encryption process. Default nonce size is 16 bytes, specifying nonce just for insurance.
                 cipher = AES.new(key, AES.MODE_GCM) 
-
                 # pack header bytes (2) of total length of ciphertext, tag, and nonce
                 # we haven't initialized the tag yet, but know it will be 16 bytes. So hard code its size
                 # ">H" specifies the bytes will be sent in big-endian
                 header = struct.pack(">H", len(pad_plaintext) + 16 + len(cipher.nonce))
                 # update will authenticate the header. Unnecessary to authenticate the nonce; and the ciphertext and tag are authenticated through encryption
-                cipher.update(header)
+                # cipher.update(header)
 
                 # encrypt the data to get a ciphertext and a tag
                 ciphertext, tag = cipher.encrypt_and_digest(pad_plaintext)
