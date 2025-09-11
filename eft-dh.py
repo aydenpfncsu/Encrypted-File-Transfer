@@ -4,9 +4,14 @@ import sys
 import socket
 import struct
 from Crypto.Cipher import AES
-from Crypto.Random import get_random_bytes
+from Crypto.Random import get_random_bytes, random as crypto_random
 from Crypto.Protocol.KDF import PBKDF2
 from Crypto.Util.Padding import pad, unpad
+from Crypto.Hash import SHA256
+
+# fixed g and h values used for Diffie-Hellman exchange
+G = 2
+P = 0x00cc81ea8157352a9e9a318aac4e33ffba80fc8da3373fb44895109e4c3ff6cedcc55c02228fccbd551a504feb4346d2aef47053311ceaba95f6c540b967b9409e9f0502e598cfc71327c5a455e2e807bede1e0b7d23fbea054b951ca964eaecae7ba842ba1fc6818c453bf19eb9c5c86e723e69a210d4b72561cab97b3fb3060b
 
 # Necessary because TCP connections send data through a stream of bytes. We cannot be certain if we will receive the entire
 # pdu data in one packet. This fn calls recv() until the bytes received is equal to the number of bytes specified by the header
@@ -22,12 +27,29 @@ def recv_n_bytes(conn, n):
         data += packet # add received byte streamt to the total bytes of data
     return data
 
-def server(port, password):
+def dh_exchange(conn):
+    """Helper function to perform the Diffie-Hellman exchange across a connection"""
+    # generate random a value s.t. 1 <= a <= p-1
+    a = crypto_random.randint(1, P - 1)
+    # generate A s.t. A = g^a % p
+    A = pow(G, a, P)
+    # pad value with zeros if not 384 digits
+    A = str(A).zfill(384)
+    # send public key to client, encoded in uft-8
+    conn.sendall(A.encode("utf-8"))
+    # receive A from the client, converting to int strips the padding
+    B = int(recv_n_bytes(conn, 384).decode("utf-8"))
+    # compute the shared key and hexify it
+    K = '%x' % pow(B, a, P)
+    # compute digest by using SHA256 hashing of the encoded K
+    digest = SHA256.new(K.encode("utf-8")).digest()
+    return digest[:32]
+
+def server(port):
     """
     Create a server to receive a file over a socket
 
-    @param port: port numbe for the connection
-    @param password: password used to generate the symmetric key
+    @param port: port number for the connection
     """
     # create a socket for the server program
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -40,10 +62,9 @@ def server(port, password):
         conn, addr = s.accept()
 
         with conn:
-            # Before receiving pdus, get 16 byte salt from client to set up symmetic key
-            salt = recv_n_bytes(conn, 16)
-            # construct symmetric key using salt
-            key = PBKDF2(password, salt, dkLen = 32)
+            # Run the DH exchange
+            key = dh_exchange(conn)
+
             # now that key is constructed, begin receiving PDUs from client
             while True:
                 # unpack the header bytes sent from the client
@@ -77,13 +98,12 @@ def server(port, password):
                 sys.stdout.buffer.write(plaintext)
 
 
-def client(ip, port, password):
+def client(ip, port):
     """
     Create a client to send a file to remote server over a socket
 
     @param ip: ip address for the connection
     @param port: port number for the connection
-    @param password: password used to generate symmetric key
     """
     # create socket for the client connection
     # AF_INET indictaes socket will use IPv4
@@ -91,14 +111,12 @@ def client(ip, port, password):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         # connect to the server specified by the IP and port
         s.connect((ip, port))
-        
-        # generate and send salt to the server, unencrypted is fine
-        salt = get_random_bytes(16)
-        s.sendall(salt)
-        # construct the symmetric key
-        key = PBKDF2(password, salt, dkLen = 32)
-        # send data to the server
+       
+        # run the DH exchange
+        key = dh_exchange(s)
+
         try:
+        # send data to the server
             while True:
                 # read from the file specified from the command line 
                 plaintext = (sys.stdin.buffer.read(1024))
@@ -126,23 +144,22 @@ def client(ip, port, password):
 
 def main():
     """Main entry point into the program"""
-    # ensure correct number of arguments passed
-    if len(sys.argv) != 5:
+    # ensure at least 1 argument passed so no index error 
+    if len(sys.argv) < 2:
         sys.exit(1)
-
-    # ensure correct arguments passed
-    if sys.argv[1] != "-k":
-        sys.exit(1)
-    # store password value used to generate key
-    password = sys.argv[2]
-
-    if sys.argv[3] == "-l":
-        # enter server mode; convert port number to integer
-        server(int(sys.argv[4]), password)
+    # parse the arguments from the command line to determine mode of uft
+    if sys.argv[1] == "-l":
+        # ensure correct arguments were passed
+        if len(sys.argv) != 3:
+            sys.exit(1)
+        # first argument 'listen' -> enter server mode
+        server(int(sys.argv[2]))
     else:
-        # enter client mode
-        client(sys.argv[3], int(sys.argv[4]), password)
-        
+        # ensure correct arguments passed
+        if len(sys.argv) != 3:
+            sys.exit(1)
+        # first argument a IP address, enter client mode
+        client(sys.argv[1], int(sys.argv[2]))
 
 
 if __name__ == "__main__":
