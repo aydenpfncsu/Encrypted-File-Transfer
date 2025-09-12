@@ -1,6 +1,13 @@
 Ayden Franklin
 200407752
 
+Programs:
+  - uft [-l PORT] [SERVER_IP_ADDRESS PORT]
+  - eft -k KEY [-l PORT] [SERVER_IP_ADDRESS PORT]
+  - eft-dh [-l PORT] [SERVER_IP_ADDRESS PORT]
+  - dh-proxy -l LISTEN_PORT SERVER_IP_ADDRESS SERVER_PORT
+  
+  *disclaimer: programs expect correct input, undefined behavior for incorrect input
 Citations:
 
   uft.py:
@@ -11,3 +18,19 @@ Citations:
     - Chatgpt. Prompt: "how to ensure header bytes are sent in big endian order for python Socket." Accessed September 1, 2025. chatgpt.com
     Prompt gave information on python3 struct module which I used to pack the header information between client and server.
     Prompt inspired my creation of recv_n_bytes helper function, used to properly receive the stream of bytes from the TCP connection.
+
+  eft.py:
+    - Naming conventions and crypto practices dominantly influenced by PyCryptodome API documentation. Used AES ciphers, get_random_bytes for salt generation, PBKDF2 for key gen, and pad/unpad for padding utility
+    https://www.pycryptodome.org/src/api. Accessed Sept. 2-10
+
+  eft-dh.py
+    https://www.pycryptodome.org/src/api. Accessed Sept. 10
+    - DH knowledge and workflow from Wikipedia
+    https://en.wikipedia.org/wiki/Diffie%E2%80%93Hellman_key_exchange. Accessed Sept. 10
+
+  dh-proxy.py
+    - Socket programming practices with select function.
+    https://docs.python.org/3/howto/sockets.html#non-blocking-sockets. Accessed Sept. 11-12
+    - Chatgpt. Prompt: "how does python socket select function work." Accessed September 12, 2025. chatgpt.com
+    Prompt gave info on how to properly use the select() function for the needs of the assignment. Because the assignment only orchestrated a 1 way connection from client to server, not all of select()s capabilities were needed. 
+

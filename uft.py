@@ -10,12 +10,12 @@ def recv_n_bytes(conn, n):
     """Helper function to receive exactly n bytes for a connection"""
     # initialize an empty byte object, used because socket connections send data as raw bytes
     data = b""
-    # loop until the size of the receievd pdu is equal to the expected size as declared in the header
+    # loop until the size of the received pdu is equal to the expected size as declared in the header
     while len(data) < n:
-        packet = conn.recv(n - len(data)) # n - len(data) specifies we are still waiting to recieve the missing bytes
-        if not packet: # client closed connection unexpectingly
+        packet = conn.recv(n - len(data)) # n - len(data) specifies we are still waiting to receive the missing bytes
+        if not packet: # client closed connection 
             return None
-        data += packet # add received byte streamt to the total bytes of data
+        data += packet # add received byte stream to the total bytes of data
     return data
 
 def server(port):
@@ -39,7 +39,7 @@ def server(port):
                     # if length == 0, then client finished file send and closed the connection
                     if length == 0:
                         break
-                    # recieve the pdu of specifized length from the header 
+                    # receive the pdu of specified length from the header 
                     pdu = recv_n_bytes(conn, length) 
                     if not pdu:
                         break

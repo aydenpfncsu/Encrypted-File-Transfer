@@ -21,12 +21,12 @@ def recv_n_bytes(conn, n):
     """Helper function to receive exactly n bytes for a connection"""
     # initialize an empty byte object, used because socket connections send data as raw bytes
     data = b""
-    # loop until the size of the receievd pdu is equal to the expected size as declared in the header
+    # loop until the size of the received pdu is equal to the expected size as declared in the header
     while len(data) < n:
-        packet = conn.recv(n - len(data)) # n - len(data) specifies we are still waiting to recieve the missing bytes
-        if not packet: # client closed connection unexpectingly
+        packet = conn.recv(n - len(data)) # n - len(data) specifies we are still waiting to receive the missing bytes
+        if not packet: # client closed connection
             return None
-        data += packet # add received byte streamt to the total bytes of data
+        data += packet # add received byte stream to the total bytes of data
     return data
 
 def dh_exchange(conn):
@@ -62,7 +62,7 @@ def proxy_process(conn, c_key, s, s_key):
             nonce = recv_n_bytes(conn, 16)
             # receive the integrity tag
             tag = recv_n_bytes(conn, 16)
-            # recieve the ciphertext of specifized length from the header; account for the 32 bytes from nonce, tag
+            # recieve the ciphertext of specified length from the header; account for the 32 bytes from nonce, tag
             ciphertext = recv_n_bytes(conn, length - len(nonce) - len(tag)) 
             if not nonce or not tag or ciphertext is None:
                 break
@@ -127,6 +127,8 @@ def proxy(listen_port, server_ip, server_port):
             c_conn.close()
             server_socket.close()
 
+    close(proxy_s)
+
 
 def main():
     """main entry point of the program"""
@@ -138,7 +140,6 @@ def main():
     
     # run the proxy process using listen port, server IP address, and server port
     proxy(int(sys.argv[2]), sys.argv[3], int(sys.argv[4]))
-
 
 
 if __name__ == "__main__":

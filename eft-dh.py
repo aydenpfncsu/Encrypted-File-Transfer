@@ -19,12 +19,12 @@ def recv_n_bytes(conn, n):
     """Helper function to receive exactly n bytes for a connection"""
     # initialize an empty byte object, used because socket connections send data as raw bytes
     data = b""
-    # loop until the size of the receievd pdu is equal to the expected size as declared in the header
+    # loop until the size of the received pdu is equal to the expected size as declared in the header
     while len(data) < n:
-        packet = conn.recv(n - len(data)) # n - len(data) specifies we are still waiting to recieve the missing bytes
-        if not packet: # client closed connection unexpectingly
+        packet = conn.recv(n - len(data)) # n - len(data) specifies we are still waiting to receive the missing bytes
+        if not packet: # client closed connection
             return None
-        data += packet # add received byte streamt to the total bytes of data
+        data += packet # add received byte stream to the total bytes of data
     return data
 
 def dh_exchange(conn):
@@ -78,7 +78,7 @@ def server(port):
                 nonce = recv_n_bytes(conn, 16)
                 # receive the integrity tag
                 tag = recv_n_bytes(conn, 16)
-                # recieve the ciphertext of specifized length from the header; account for the 32 bytes from nonce, tag
+                # recieve the ciphertext of specified length from the header; account for the 32 bytes from nonce, tag
                 ciphertext = recv_n_bytes(conn, length - len(nonce) - len(tag)) 
                 if not nonce or not tag or ciphertext is None:
                     break
@@ -147,7 +147,7 @@ def main():
     # ensure at least 1 argument passed so no index error 
     if len(sys.argv) < 2:
         sys.exit(1)
-    # parse the arguments from the command line to determine mode of uft
+    # parse the arguments from the command line to determine mode
     if sys.argv[1] == "-l":
         # ensure correct arguments were passed
         if len(sys.argv) != 3:
