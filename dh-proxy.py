@@ -127,8 +127,6 @@ def proxy(listen_port, server_ip, server_port):
             c_conn.close()
             server_socket.close()
 
-    close(proxy_s)
-
 
 def main():
     """main entry point of the program"""
